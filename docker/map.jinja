@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+# vim: ft=jinja:ts=2:sw=2
+
+{% set cur_os = salt['grains.get']('os') %}
+{% set cur_oscodename = salt['grains.get']('oscodename') %}
+{% set cur_kernel = salt['grains.get']('kernelrelease') %}
+
+{## Start with  defaults from defaults.yaml ##}
+{% import_yaml "docker/defaults.yaml" as default_settings %}
+
+{% set os_map = salt['grains.filter_by']({
+    'Debian': {
+      'repo': {
+        'name': 'deb https://apt.dockerproject.org/repo ' ~ cur_os ~ '-' ~ cur_oscodename ~ ' main',
+        'keyid': '58118E89F3A912897C070ADBF76221572C52609D',
+        'keyserver': 'p80.pool.sks-keyservers.net:80',
+      },
+      'default_pkg': 'docker.io',
+    },
+    'Gentoo': {
+      'default_pkg': 'app-emulation/docker',
+    },
+    'RedHat': {
+      'repo': {
+        'baseurl': 'https://yum.dockerproject.org/repo/main/centos/$releasever/',
+        'gpgkey': 'https://yum.dockerproject.org/gpg',
+        'humanname': 'docker.io',
+      },
+    },
+  }
+  , grain="os_family"
+  , merge=salt['grains.filter_by']({
+      'Fedora': {
+        'repo': {
+          'baseurl': 'https://yum.dockerproject.org/repo/main/fedora/$releasever/',
+        },
+  	  },
+      'Ubuntu': {
+        'deps': [
+          'apt-transport-https',
+          'ca-certificates',
+          'linux-image-extra-' ~ cur_kernel,
+          'linux-image-extra-virtual',
+        ],
+  	  },
+    }
+    , grain="os"
+    , merge=salt['pillar.get']('docker:lookup')))
+%}
+
+{## Merge the flavor_map to the default settings ##}
+{% do default_settings.docker.update(os_map) %}
+
+{## Merge in docker pillar ##}
+{% set docker_settings = salt['pillar.get'](
+    'docker',
+    default=default_settings.docker,
+    merge=True)
+%}
